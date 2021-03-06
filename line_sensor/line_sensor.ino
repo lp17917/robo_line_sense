@@ -89,6 +89,7 @@ void loop()
       line_left.calibrate();
       line_centre.calibrate();
       line_right.calibrate();
+      state = findline;
     case(findline):
       left_motor.speedchange(23);
       right_motor.speedchange(25);
