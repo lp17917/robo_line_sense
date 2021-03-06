@@ -2,6 +2,8 @@
 #include "motor.h"
 
 #define BUTTON_A 14
+#define BUZZER 6
+
 #define LINE_LEFT_PIN A2
 #define LINE_CENTRE_PIN A3
 #define LINE_RIGHT_PIN A4
@@ -11,10 +13,13 @@
 #define R_PWM_PIN  9
 #define R_DIR_PIN 15
 
-bool calibrated;
-bool on;
+#define standby 0
+#define startup 1
+#define initalise 2
+#define findline 3
+#define foundline 4
+
 float threshold;
-bool foundline;
 float leftlevel;
 float centrelevel;
 float rightlevel;
@@ -23,7 +28,7 @@ float propleft;
 float propcentre;
 float propright;
 float M;
-int mprint;
+int state;
 
 lineSensor_c line_left(LINE_LEFT_PIN); //Create a line sensor object for the left sensor
 lineSensor_c line_centre(LINE_CENTRE_PIN); //Create a line sensor object for the centre sensor
@@ -31,7 +36,7 @@ lineSensor_c line_right(LINE_RIGHT_PIN); //Create a line sensor object for the r
 motor_c left_motor(L_DIR_PIN,L_PWM_PIN);
 motor_c right_motor(R_DIR_PIN,R_PWM_PIN);
 
-void bangbang(){
+void weighted_line_sense(){
   leftlevel = line_left.getlevel();
   centrelevel = line_centre.getlevel();
   rightlevel = line_right.getlevel();
@@ -40,8 +45,7 @@ void bangbang(){
   propcentre = centrelevel/totalread;
   propright = rightlevel/totalread;
   M = propright - propleft;
-  Serial.print(M*100);
-  if (-0.30 < M && M < 0.30){
+  if (-0.25 < M && M < 0.25){
       left_motor.speedchange(23);
       right_motor.speedchange(25);
   }
@@ -49,24 +53,10 @@ void bangbang(){
     left_motor.speedchange(M*50*1);
     right_motor.speedchange(M*50*-1);
   }
-    /*
-    //if no sensors are on the line and it has been found 
-    if (!line_left.onLine(threshold)){
-      //turn right
-      left_motor.speedchange(20);
-      right_motor.speedchange(0);
-    }
-    else if (!line_right.onLine(threshold)){
-      //turn left
-      left_motor.speedchange(0);
-      right_motor.speedchange(20);
-    }
-    else if (line_centre.onLine(threshold)){
-      //go forwards
-      left_motor.speedchange(20);
-      right_motor.speedchange(20);
-    }
-    */
+}
+
+void play_tone(int volume) {
+    analogWrite(BUZZER, volume);
 }
 
 
@@ -74,40 +64,46 @@ void setup() {
   // put your setup code here, to run once:
   pinMode(LED_BUILTIN, OUTPUT);
   Serial.begin(115200);
+  pinMode(BUZZER, OUTPUT);
   threshold = 200;
-  calibrated = false;
-  on = false;
-  foundline = false;
+  state = standby;
 }
 
 void loop() 
 {
 
+  switch(state){
+    case(standby):
+      if ((digitalRead(BUTTON_A) == LOW)){
+        state = startup;
+      }
+    case(startup):
+      for (int i = 0; i < 5; i++){
+        play_tone(64);
+        delay(500);
+        play_tone(0);
+        delay(500);
+      }
+      state = initalise;
+    case(initalise):
+      line_left.calibrate();
+      line_centre.calibrate();
+      line_right.calibrate();
+    case(findline):
+      left_motor.speedchange(23);
+      right_motor.speedchange(25);
+      if (line_left.getlevel() > threshold || line_right.getlevel() > threshold ||line_centre.getlevel() > threshold){
+        left_motor.speedchange(0);
+        right_motor.speedchange(0);
+        state = foundline;
+      }
+    case(foundline):
+      weighted_line_sense();
+  }
+  
   
 
-  
-  if (calibrated){
-    bangbang();
-  }
-  else if (on){
-    line_left.calibrate();
-    line_centre.calibrate();
-    line_right.calibrate();
-    digitalWrite( LED_BUILTIN, HIGH  );
-    delay(500);
-    digitalWrite( LED_BUILTIN, LOW  );
-    delay(500);
-    digitalWrite( LED_BUILTIN, HIGH  );
-    delay(500);
-    digitalWrite( LED_BUILTIN, LOW  );
-    delay(500);
-    calibrated = true;
-  }
-  else if ((digitalRead(BUTTON_A) == LOW)){
-    on = true;
-  }
-
- 
+ /*
   // To store result.
   int l_value; // left sensor
   int c_value; // centre sensor
@@ -138,5 +134,5 @@ void loop()
   Serial.print( "\n" );
   */
 
-  delay(50);
+  delay(25);
 }
